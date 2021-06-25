@@ -1,0 +1,27 @@
+library(seurat)
+sce_xx1 <- CreateSeuratObject(counts = females, 
+                             min.cells = 1, min.features = 0, 
+                             project = 'c1_xy') # already normalized
+sce_xx1
+# Add meta.data (nUMI and timePoints)
+sce_xx1 <- AddMetaData(object = sce_xx1, 
+                      metadata = apply(females, 2, sum), 
+                      col.name = 'nUMI_raw')
+
+sce_xx1 <- AddMetaData(object = sce_xx1, 
+                      metadata = female_stages, 
+                      col.name = 'female_stages')
+
+sce_xx1 <- ScaleData(object = sce_xx1, 
+                    vars.to.regress = c('nUMI_raw'), 
+                    model.use = 'linear', 
+                    use.umi = FALSE)
+ sce_xx1 <- FindVariableFeatures(object = sce_xx1, 
+                               mean.function = ExpMean, 
+                               dispersion.function = LogVMR, 
+                               x.low.cutoff = 0.0125, 
+                               x.high.cutoff = 4, 
+                               y.cutoff = 0.5)
+length(VariableFeatures(sce_xx))
+NSAIDs_2000=VariableFeatures(sce_xx)
+save(seurat_v3_2000_var_genes,file = 'seurat_v3_2000_var_genes.Rdata')
