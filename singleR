@@ -1,0 +1,18 @@
+BiocManager::install("celldex")
+library(celldex)
+hpca.se <- HumanPrimaryCellAtlasData()
+hpca.se
+library(scRNAseq)
+hESCs <- LaMannoBrainData('human-es')
+hESCs <- hESCs[,1:100]  
+library(SingleR)
+pred.hesc <- SingleR(test = expr, ref = hpca.se, assay.type.test=1,
+                     labels = hpca.se$label.main)
+table(pred.hesc$labels)
+group=pred.hesc$labels
+Myelocyte
+group1=sce_xx@meta.data[["cell_types"]]
+table(group1)
+sce_xx <- AddMetaData(object = sce_xx, 
+                      metadata = group1, 
+                      col.name = 'cell_types')
