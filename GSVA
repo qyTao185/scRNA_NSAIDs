@@ -1,0 +1,235 @@
+#######################################################
+gmt_file=myC7
+geneset<- getGmt("c2.cp.v7.4.symbols.gmt", 
+               collectionType=BroadCollection(category="c7"), sep="\t")
+geneIdType=EntrezIdentifier(), collectionType=BroadCollection(category="c7"), sep="\t")
+
+geneset <-gmt_file
+# Some required R packages
+BiocManager::install(pkgs,ask = F,update = F) 
+pkgs=c("GSVA","GSVAdata","msigdbr")
+install.packages("GSVA")
+library(Seurat)
+library(dplyr)
+library(Matrix)
+library(GSVA)
+library(GSEABase)
+library(GSVAdata)
+library(limma)
+library(msigdbr)
+library(Biobase)
+library(pheatmap)
+
+# Code adapted from : http://www.bioconductor.org/packages/release/bioc/vignettes/GSVA/inst/doc/GSVA.pdf
+  
+  # select cells
+  selectExpressionSetObject <- ExpressionSetObject[ , ExpressionSetObject$FinalCelltype %in% celltype]
+  
+  selectExpressionSetObject=ExpressionSetObject
+  
+  # filter low expression genes
+  candidategenes <- rownames(exprs(selectExpressionSetObject))
+  
+  length(candidategenes)
+  
+   #log2 mean expression >= Exp
+  
+  meanExp <- lapply( candidategenes, function(x) { 
+    
+    tmp <-as.data.frame(tapply(exprs(selectExpressionSetObject)[x,], 
+                               
+                               selectExpressionSetObject$group_list, 
+                               
+                               function(y){ log2(mean(exp(y)-1)+1) } ));
+    
+    colnames(tmp) <- x ;
+    
+    tmp 
+    
+  } )
+  
+  meanExpData <- as.data.frame(t(do.call(cbind,meanExp)))
+  
+  saveGeneByMean <- rownames(meanExpData[ rowMeans(meanExpData )>= Exp ,])
+  
+  length(saveGeneByMean)
+  
+  # mean express percent >= Pct
+  expPercent <- lapply( saveGeneByMean, function(x) { 
+    
+    tmp <-as.data.frame(tapply(exprs(selectExpressionSetObject)[x,], 
+                               
+                               selectExpressionSetObject$group_list, 
+                               
+                               function(y){ length(which(y>0))/length(y) } ));
+    
+    colnames(tmp) <- x ;
+    
+    tmp
+    
+  } )
+  
+  expPercentData <- as.data.frame(t(do.call(cbind,expPercent)))
+  
+  saveGeneByExpPercent <- rownames(expPercentData[ rowMeans(expPercentData) >= Pct, ])
+  
+  length(saveGeneByExpPercent)
+  
+  # Filtered selectExpressionSetObject
+  selectExpressionSetObject <- selectExpressionSetObject[saveGeneByExpPercent,]
+  
+  selectExpressionSetObject
+  
+  # run GSVA
+  geneset <- getGmt(GmtFile)
+  
+  GSVAresults <- gsva( selectExpressionSetObject , geneset , min.sz=min.size, max.sz=max.size,
+                       
+                       method="gsva", kcdf="Gaussian", mx.diff=TRUE, verbose=TRUE, parallel.sz=1)
+  
+    GSVAresults
+  
+
+  data=GSVAresults@assayData$exprs
+  # run Limma
+
+design <- model.matrix(~0+factor(group_list))
+colnames(design)=levels(factor(group_list))
+rownames(design)=colnames(expr)#keyi
+design
+library(limma)
+contrast.matrix<-makeContrasts(paste0(unique(group_list),collapse = "-"),levels = design)
+contrast.matrix ##这个矩阵声明，把progres.组跟stable进行差异分析比较
+cont.matrix <- makeContrasts(contrasts = c('low-high'), levels = design)
+##step1
+fit <- lmFit(expr,design)
+##step2
+fit2 <- contrasts.fit(fit, contrast.matrix) 
+fit2 <- contrasts.fit(fit, cont.matrix)
+fit3 <- eBayes(fit2)  ## default no trend !!!
+##eBayes() with trend=TRUE
+##step3
+Output = topTable(fit, coef=1, n=Inf)
+Output=Output[Output$adj.P.Val<=0.05]
+lmmuneDEG= na.omit(tempOutput) 
+nrDEG = na.omit(tempOutput) 
+
+############################################################################################
+##火山图
+##volcano
+install.packages("volcano")
+library(volcano)
+library(ggplot2)
+library(ggthemes)
+library(Cairo)
+install.packages(volcano)
+
+plot(Output$logFC,-log2(Output$P.Value))
+logFC_cutoff=with(Output,mean(abs(logFC))+2*sd(abs(logFC)))
+Output$change=as.factor(ifelse(Output$adj.P.Val<0.05&abs(Output$logFC)>logFC_cutoff,
+                            ifelse(Output$logFC>logFC_cutoff,"UP","DOWN"),"NOT"))
+this_tile=paste0('logFC_cutoff',round(logFC_cutoff,3),
+                 '\nup gene set',nrow(Output[Output$change=='UP',]),'\ndown gene set',nrow(Output[Output$change=='DOWN',]))
+
+                 
+ggplot(data=Output,aes(x=logFC,y=p,color=change))+theme_bw()+
+  geom_point(alpha=0.4,size=1.75)+
+  theme(panel.border = element_blank())+
+  theme(panel.grid.major=element_line(colour=NA))+
+  #theme_set(theme_set(theme_bw(base_size=20)))+
+  #xlab("log2 fold change")+ylab=("-log10(adjP)")+
+  ggtitle(this_tile)+theme(plot.title=element_text(size=15,hjust=0.5))+
+  scale_colour_manual(values=c('blue','black','red'))+
+  theme(panel.grid =element_blank())+
+theme(axis.line = element_line(size=1, colour = "black"))+
+  theme(axis.title.x = element_text(size = 11,face = "bold"),axis.title.y = element_blank())+
+  theme(legend.title = element_blank())
+
+
+Output$P=scale(Output$adj.P.Val)
+runif(n,min=min,max=max) #n表示随机数的个数，min、max分别表示最小值、最大值。
+Output=Output[order(Output[,5]),]
+y=as.numeric(c(x,p))
+Output$p=y
+x=runif(504,min=10,max=520)
+
+
+###############################################################################################
+#GSVA heatmap
+Output0.05=Output[Output$adj.P.Val<0.05&abs(Output$logFC)>logFC_cutoff,]
+Output0.05_expr=data[rownames(Output0.05),]
+Output0.05_expr=t(Output0.05_expr)
+Output0.05_expr$group=x$cell.anno
+library(ggplot2)
+library(ggthemr)
+library(ggsignif)
+library(tidyverse)
+library(dplyr)
+library(ggpubr)
+library(devEMF)
+install.packages("ggplotthemr")
+
+Output0.05_map <- Output0.05_expr %>% 
+  dplyr::group_by(group) %>% 
+  dplyr::summarize()
+  
+  
+  rownames(Output0.05_map)=c("Infla","Noninfla")
+Output0.05_map=Output0.05_map[,-1]
+rownames(Output0.05_map)=c("Infla","Noninfla")
+
+library(pheatmap)
+Output0.05_map=t(Output0.05_map)
+pheatmap(Output0.05_map,scale = "row",color = colorRampPalette(c("navy", "white", "firebrick3"))(10),angle_col = "315")
+
+col <- colorRampPalette(c("red", "white", "blue"))(256)
+SOD_mean_log <- log2(SOD_meanhmap)
+pheatmap(Output0.05_map,#scale =  "row",
+         color = colorRampPalette(c("navy", "white", "firebrick3"))(10),
+         #col=colorRamp2(c(-2, 0, 2), c("green", "white", "red")),
+         #color = col,
+         #col=colorRamp2(c(-2, 0, 2), c("blue", "white", "red")),
+         #angle_col = "315",
+         cluster_cols = FALSE,#cluster_rows = FALSE,
+         fontsize_row = 8,fontsize_col = 14,
+         border_color = "white",show_rownames = FALSE)
+         #legend=FALSE)
+         #show_rownames = FALSE)
+es=data.frame(t(data),stringsAsFactors=F)
+sce_xxx=AddMetaData(sce_xx,es)
+x1=FeaturePlot(sce_xxx,features = "BIOCARTA_SM_PATHWAY",min.cutoff = 0,max.cutoff = 30,
+            reduction ="umap",pt.size=0.0000000000000000000001)+
+          theme(legend.position = "none",
+         line =element_blank(),
+         axis.line = element_blank(),
+         axis.text=element_blank(),
+         axis.title = element_blank(),
+         plot.title = element_text(size=10, face="bold.italic", hjust = 0))+labs(title='BIOCARTA SM PATHWAY')
+x2=FeaturePlot(sce_xxx,features = "WP_GASTRIC_CANCER_NETWORK_1",
+            reduction ="umap",pt.size=0.0000000000000000000001)+
+  theme(legend.position = "none",
+        line =element_blank(),
+        axis.line = element_blank(),
+        axis.text=element_blank(),
+        axis.title = element_blank(),
+        plot.title = element_text(size=10, face="bold.italic", hjust = 0))+labs(title='GASTRIC CANCER NETWORK1')
+x3=FeaturePlot(sce_xxx,features = "WP_INFLAMMATORY_RESPONSE_PATHWAY",
+            reduction ="umap",pt.size=0.0000000000000000000001)+
+  theme(legend.position = "none",
+        line =element_blank(),
+        axis.line = element_blank(),
+        axis.text=element_blank(),
+        axis.title = element_blank(),
+        plot.title = element_text(size=10, face="bold.italic", hjust = 0))+labs(title='INFLAMMATORY RESPONSE PATHWAY')
+x4=FeaturePlot(sce_xxx,features = "REACTOME_ASSOCIATION_OF_TRIC_CCT_WITH_TARGET_PROTEINS_DURING_BIOSYNTHESIS",
+            reduction ="umap",pt.size=0.0000000000000000000001)+
+  theme(#legend.position = "none",
+        line =element_blank(),
+        axis.line = element_blank(),
+        axis.text=element_blank(),
+        axis.title = element_blank(),
+        plot.title = element_text(size=10, face="bold.italic", hjust = 0))+labs(title='ASSOCIATION OF TRIC CCT WITH TARGET PROTEINS DURING BIOSYNTHESIS  ')
+
+
+ggarrange(x1, x2,x3, x4 + rremove("x.text"), 
+          ncol = 2, nrow = 2) 
